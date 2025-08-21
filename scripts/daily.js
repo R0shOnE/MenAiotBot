@@ -1,9 +1,7 @@
 // scripts/daily.js
 // Digest RSS → Telegram (HTML) SANS IA
-// Format demandé :
-// • Titre (Source)
-//    🔗 Lien
-// [ligne vide entre les items]
+// Format: • Titre (Source) 🔗  (icône cliquable uniquement)
+// Une ligne vide entre les items (modifiable)
 
 import Parser from "rss-parser";
 
@@ -74,13 +72,12 @@ function isIsrael(it) {
   return /globes|themarker|calcalist|ynet|timesofisrael|i24news/.test(s);
 }
 
-// Format item sur 2 lignes, puis une ligne vide (donc on rejoindra avec "\n\n")
+// Titre en gras (noir), source en italique, icône 🔗 cliquable uniquement
 function fmtItem(it) {
   const t   = escapeHtml(it.title || "");
   const src = escapeHtml(it.source || "");
   const url = escapeHtml(it.link || "");
-  // Titre en gras, source en italique, lien cliquable sur le MOT "Lien"
-  return `• <b>${t}</b> <i>(${src})</i>\n   🔗 <a href="${url}">Lien</a>`;
+  return `• <b>${t}</b> <i>(${src})</i> <a href="${url}">🔗</a>`;
 }
 
 // ----- Fetch RSS -----
@@ -114,7 +111,7 @@ function buildDigest(allItems) {
   const now = ilNow();
   const sep = `<code>──────────</code>`;
 
-  // IMPORTANT : on sépare les items par double \n pour insérer une ligne vide entre eux
+  // Ligne vide entre items: join("\n\n"). Pour compact, remplace par join("\n").
   const blockIL = topIL.length ? topIL.map(fmtItem).join("\n\n") : "• (rien de saillant / feed KO)";
   const blockWW = topWW.length ? topWW.map(fmtItem).join("\n\n") : "• (rien de saillant / feed KO)";
 
@@ -139,7 +136,7 @@ function buildDigest(allItems) {
   return [header, "", sections, "", footer].join("\n");
 }
 
-// ----- Découpage (évite de couper des balises) -----
+// ----- Découpage (éviter de couper du HTML) -----
 function chunkHtmlByLines(html, max = 4000) {
   const lines = html.split("\n");
   const chunks = [];
@@ -157,7 +154,7 @@ function chunkHtmlByLines(html, max = 4000) {
   return chunks;
 }
 
-// ----- Send Telegram -----
+// ----- Envoi Telegram -----
 async function sendTelegram(html) {
   const parts = chunkHtmlByLines(html, 4000);
   for (const chunk of parts) {

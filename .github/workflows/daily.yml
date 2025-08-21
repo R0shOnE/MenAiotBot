@@ -2,7 +2,8 @@ name: Daily Telegram Digest
 
 on:
   schedule:
-    - cron: "30 5 * * *"   # 05:30 UTC (08:30 IDT / 07:30 IST)
+    # Toutes les 4h à partir de 05h30 UTC (≈ 08h30 IL)
+    - cron: "30 5,9,13,17,21,1 * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -11,17 +12,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
+
+      - name: Cache Node.js modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Install deps
         run: npm ci || npm install
 
       - name: Send digest
+        run: node scripts/daily.js
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: node scripts/daily.js
