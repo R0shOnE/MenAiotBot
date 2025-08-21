@@ -2,7 +2,7 @@ name: Daily Telegram Digest
 
 on:
   schedule:
-    - cron: "30 5 * * *"   # 05:30 UTC ≈ 08:30 IL (été)
+    - cron: "30 5 * * *"   # 05:30 UTC ≈ 08:30 Israël (été)
   workflow_dispatch: {}
 
 jobs:
@@ -13,7 +13,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Send Telegram message
+      - name: Install deps
+        run: npm ci || npm install
+      - name: Send digest
         run: node scripts/daily.js
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
