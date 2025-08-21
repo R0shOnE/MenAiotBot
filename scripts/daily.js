@@ -1,6 +1,6 @@
 // scripts/daily.js
-const token  = process.env.TG_TOKEN;    // défini dans GitHub Secrets
-const chatId = process.env.TG_CHAT_ID;  // idem
+const token  = process.env.TG_TOKEN;
+const chatId = process.env.TG_CHAT_ID;
 
 if (!token || !chatId) {
   console.error("❌ Missing TG_TOKEN or TG_CHAT_ID");
@@ -8,7 +8,6 @@ if (!token || !chatId) {
 }
 
 const nowIL = new Date().toLocaleString("fr-FR", { timeZone: "Asia/Jerusalem" });
-
 const text = [
   "☀️ Daily digest (prototype)",
   `Heure (IL) : ${nowIL}`,
@@ -18,7 +17,6 @@ const text = [
   "• Risk radar : (à compléter)"
 ].join("\n");
 
-// Node 18/20 a fetch intégré
 const url = `https://api.telegram.org/bot${token}/sendMessage`;
 fetch(url, {
   method: "POST",
@@ -30,7 +28,4 @@ fetch(url, {
     if (!j.ok) throw new Error(JSON.stringify(j));
     console.log("✔️ Message envoyé.");
   })
-  .catch(e => {
-    console.error("❌ Envoi échoué:", e.message);
-    process.exit(1);
-  });
+  .catch(e => { console.error("❌ Envoi échoué:", e.message); process.exit(1); });
