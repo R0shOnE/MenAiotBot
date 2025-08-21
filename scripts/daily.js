@@ -1,8 +1,9 @@
 // scripts/daily.js
-// Digest RSS → Telegram (sans IA)
+// Digest RSS → Telegram (HTML, sans IA), avec mise en forme propre et séparation des sections.
 
 import Parser from "rss-parser";
 
+// ----- ENV -----
 const token  = process.env.TG_TOKEN;
 const chatId = process.env.TG_CHAT_ID;
 
@@ -11,7 +12,7 @@ if (!token || !chatId) {
   process.exit(1);
 }
 
-// ===== Feeds optimisés =====
+// ----- FEEDS (optimisés pour runners GitHub) -----
 const FEEDS = [
   // International
   { name: "Reuters World",    url: "https://feeds.reuters.com/reuters/worldNews" },
@@ -26,10 +27,10 @@ const FEEDS = [
   { name: "Times of Israel",  url: "https://www.timesofisrael.com/feed/" },
   { name: "I24News",          url: "https://www.i24news.tv/en/rss" },
 
-  // Marchés
-  { name: "Investing.com Latest",       url: "https://www.investing.com/rss/news.rss" },
-  { name: "Investing.com Commodities",  url: "https://www.investing.com/rss/news_commodities.rss" },
-  { name: "Investing.com Forex",        url: "https://www.investing.com/rss/news_forex.rss" }
+  // Marchés (news)
+  { name: "Investing.com Latest",      url: "https://www.investing.com/rss/news.rss" },
+  { name: "Investing.com Commodities", url: "https://www.investing.com/rss/news_commodities.rss" },
+  { name: "Investing.com Forex",       url: "https://www.investing.com/rss/news_forex.rss" }
 ];
 
 const parser = new Parser({
@@ -37,96 +38,147 @@ const parser = new Parser({
   headers: { "User-Agent": "Mozilla/5.0 (MenAiotBot/1.0)" },
 });
 
+// ----- Utils -----
+function escapeHtml(s = "") {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 function uniqByTitle(items) {
   const seen = new Set();
-  return items.filter(it => {
+  return items.filter((it) => {
     const t = (it.title || "").trim();
-    if (!t || seen.has(t.toLowerCase())) return false;
-    seen.add(t.toLowerCase());
+    if (!t) return false;
+    const k = t.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
     return true;
   });
 }
-
 function pickTop(items, n = 5) {
   return items
-    .map(it => ({
+    .map((it) => ({
       ...it,
       _ts: it.isoDate ? Date.parse(it.isoDate) : (it.pubDate ? Date.parse(it.pubDate) : 0),
     }))
     .sort((a, b) => b._ts - a._ts)
     .slice(0, n);
 }
+function ilNow() {
+  return new Date().toLocaleString("fr-FR", { timeZone: "Asia/Jerusalem" });
+}
+function isIsrael(it) {
+  const s = `${it.source || ""} ${it.link || ""}`.toLowerCase();
+  return /globes|themarker|calcalist|ynet|timesofisrael|i24news/.test(s);
+}
+function fmtItem(it) {
+  const t = escapeHtml(it.title || "");
+  const src = escapeHtml(it.source || "");
+  const url = escapeHtml(it.link || "");
+  return `• <a href="${url}">${t}</a> <i>(${src})</i>`;
+}
 
+// ----- Fetch RSS -----
 async function fetchAllFeeds() {
-  const results = [];
+  const all = [];
   for (const f of FEEDS) {
     try {
       const feed = await parser.parseURL(f.url);
-      const items = (feed.items || []).map(it => ({
+      const items = (feed.items || []).map((it) => ({
         source: f.name,
         title: (it.title || "").replace(/\s+/g, " ").trim(),
-        link: it.link || it.guid || "",
+        link: (it.link || it.guid || "").toString().trim(),
         isoDate: it.isoDate || it.pubDate || "",
       }));
-      results.push(...items);
+      all.push(...items);
     } catch (e) {
-      console.error(`⚠️ Feed error [${f.name}]:`, e.message);
+      console.error(`⚠️ Feed error [${f.name}]: ${e.message || e}`);
     }
   }
-  return results;
+  return all;
 }
 
+// ----- Build digest (HTML) -----
 function buildDigest(allItems) {
-  const IL = uniqByTitle(allItems.filter(it => /globes|themarker|calcalist|ynet|timesofisrael|i24news/i.test(it.source + it.link)));
-  const WW = uniqByTitle(allItems.filter(it => !/globes|themarker|calcalist|ynet|timesofisrael|i24news/i.test(it.source + it.link)));
+  const IL = uniqByTitle(allItems.filter(isIsrael));
+  const WW = uniqByTitle(allItems.filter((x) => !isIsrael(x)));
 
   const topIL = pickTop(IL, 5);
   const topWW = pickTop(WW, 5);
 
-  const nowIL = new Date().toLocaleString("fr-FR", { timeZone: "Asia/Jerusalem" });
+  const now = ilNow();
+  const sep = `<code>──────────</code>`; // séparateur sûr supporté par Telegram
 
-  const fmt = (arr) =>
-    arr.map(it => `• ${it.title}\n  ${it.link}`).join("\n");
+  const blockIL = topIL.length ? topIL.map(fmtItem).join("\n") : "• (rien de saillant / feed KO)";
+  const blockWW = topWW.length ? topWW.map(fmtItem).join("\n") : "• (rien de saillant / feed KO)";
 
-  return [
-    "☀️ Daily digest (RSS auto, sans IA)",
-    `Heure (IL) : ${nowIL}`,
-    "",
-    "Israël",
-    topIL.length ? fmt(topIL) : "• (rien de saillant / feed KO)",
-    "",
-    "Monde / Marchés",
-    topWW.length ? fmt(topWW) : "• (rien de saillant / feed KO)"
+  const header = [
+    `☀️ <b>Daily digest</b> <i>(RSS auto, sans IA)</i>`,
+    `<b>Heure (IL)</b> : ${escapeHtml(now)}`,
   ].join("\n");
+
+  const sections = [
+    "🇮🇱 <b>Israël</b>",
+    blockIL,
+    sep,
+    "🌍 <b>Monde / Marchés</b>",
+    blockWW,
+  ].join("\n");
+
+  const footer = [
+    sep,
+    `<i>Sources</i> : ${escapeHtml(FEEDS.map((f) => f.name).join(", "))}`
+  ].join("\n");
+
+  return [header, "", sections, "", footer].join("\n");
 }
 
-async function sendTelegram(text) {
-  const MAX = 4000; // limite Telegram
-  for (let i = 0; i < text.length; i += MAX) {
-    const chunk = text.slice(i, i + MAX);
+// ----- Découpage par lignes (évite de casser des balises HTML) -----
+function chunkHtmlByLines(html, max = 4000) {
+  const lines = html.split("\n");
+  const chunks = [];
+  let cur = "";
+
+  for (const line of lines) {
+    // +1 pour le \n qu'on rajoute
+    if ((cur.length + line.length + 1) > max) {
+      if (cur.length > 0) chunks.push(cur);
+      cur = line;
+    } else {
+      cur = cur ? cur + "\n" + line : line;
+    }
+  }
+  if (cur.length > 0) chunks.push(cur);
+  return chunks;
+}
+
+// ----- Envoi Telegram (HTML, no preview) -----
+async function sendTelegram(html) {
+  const parts = chunkHtmlByLines(html, 4000);
+  for (const chunk of parts) {
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
     const body = {
       chat_id: chatId,
       text: chunk,
+      parse_mode: "HTML",
       disable_web_page_preview: true
     };
     const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).then(x => x.json());
+    }).then((x) => x.json());
     if (!r.ok) throw new Error(`Send failed: ${JSON.stringify(r)}`);
   }
 }
 
+// ----- Main -----
 (async () => {
   try {
     const items = await fetchAllFeeds();
-    const text = buildDigest(items);
-    await sendTelegram(text);
+    const html = buildDigest(items);
+    await sendTelegram(html);
     console.log("✔️ Digest envoyé");
   } catch (e) {
-    console.error("❌ ERROR:", e.message);
+    console.error("❌ ERROR:", e.message || e);
     process.exit(1);
   }
 })();
