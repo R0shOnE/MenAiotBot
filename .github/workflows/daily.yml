@@ -1,0 +1,26 @@
+name: Daily Bot Report
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # tous les jours à 6h UTC
+  workflow_dispatch:       # permet aussi de lancer manuellement
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run bot
+        run: node index.js
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
